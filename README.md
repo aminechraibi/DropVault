@@ -19,9 +19,15 @@
 
 ## 📱 Screenshots & Interface
 
-- **Inbox Grid & List Views**: Toggle between compact vertical list and multi-column visual grid view.
-- **Web Access Center**: Real-time IP address display, configurable port, one-tap server toggle, and secure PIN generator.
-- **Folders Manager**: Quick navigation between All Items, Favorites, Archive, and user-created folders.
+<p align="center">
+  <img src="docs/screenshots/inbox.jpg" width="30%" alt="Inbox Screen" />
+  <img src="docs/screenshots/folders.jpg" width="30%" alt="Folders Screen" />
+  <img src="docs/screenshots/webaccess.jpg" width="30%" alt="Web Access Screen" />
+</p>
+
+- **Inbox View**: Fast local search bar, quick filter chips (Text, Links, Images, Audio, Video, Files), FAB actions, and grid/list view switcher.
+- **Folders & Collections**: Built-in collections for All Items, Favorites, and Archive, plus custom user-created folders.
+- **Web Access Center**: Real-time Wi-Fi IP address display, server toggle switch, PIN generator, and storage breakdown gauge.
 
 ---
 
