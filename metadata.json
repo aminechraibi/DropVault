@@ -1,0 +1,6 @@
+{
+  "name": "DropVault",
+  "description": "Local-first Android inbox & Wi-Fi drop zone for quick text sharing, media capture, file storage, and instant cross-device browser access.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

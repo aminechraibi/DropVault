@@ -1,0 +1,133 @@
+name: Automated Release & Signed APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, Sign & Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant Execute Permission for Gradle
+        run: chmod +x gradlew || true
+
+      - name: Run Unit Tests
+        run: gradle :app:testDebugUnitTest --no-daemon
+
+      - name: Calculate Version Tag from Gradle
+        if: github.event_name == 'push'
+        id: versioning
+        run: |
+          # Read versionName and versionCode from app/build.gradle.kts
+          GRADLE_NAME=$(grep -E 'versionName\s*=\s*"' app/build.gradle.kts | head -n 1 | sed -E 's/.*versionName\s*=\s*"([^"]+)".*/\1/')
+          GRADLE_CODE=$(grep -E 'versionCode\s*=\s*' app/build.gradle.kts | head -n 1 | sed -E 's/.*versionCode\s*=\s*([0-9]+).*/\1/')
+
+          if [ -n "$GRADLE_NAME" ]; then
+            NEW_VERSION="$GRADLE_NAME"
+            NEW_TAG="v${GRADLE_NAME}"
+          else
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+            NEW_TAG="$LATEST_TAG"
+            NEW_VERSION="${LATEST_TAG#v}"
+          fi
+
+          BUILD_CODE="${GRADLE_CODE:-1}"
+          LAST_COMMIT=$(git log -1 --pretty=%B | head -n 1)
+
+          echo "NEW_TAG=${NEW_TAG}" >> $GITHUB_ENV
+          echo "NEW_VERSION=${NEW_VERSION}" >> $GITHUB_ENV
+          echo "BUILD_CODE=${BUILD_CODE}" >> $GITHUB_ENV
+          echo "LAST_COMMIT=${LAST_COMMIT}" >> $GITHUB_ENV
+          echo "Resolved release version: ${NEW_TAG} (Build ${BUILD_CODE})"
+
+      - name: Setup Keystore for Release Signing
+        if: github.event_name == 'push'
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "Decoding release keystore from secrets..."
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.jks
+            echo "KEYSTORE_PATH=${GITHUB_WORKSPACE}/release.jks" >> $GITHUB_ENV
+            echo "STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+          else
+            echo "No custom keystore secret found. Generating self-signed release key..."
+            keytool -genkeypair -v -keystore release.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=DropVault, OU=Mobile, O=DropVault, L=City, S=State, C=US"
+            echo "KEYSTORE_PATH=${GITHUB_WORKSPACE}/release.jks" >> $GITHUB_ENV
+            echo "STORE_PASSWORD=android" >> $GITHUB_ENV
+            echo "KEY_ALIAS=upload" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=android" >> $GITHUB_ENV
+          fi
+
+      - name: Build Signed Release APK
+        if: github.event_name == 'push'
+        run: gradle :app:assembleRelease --no-daemon
+
+      - name: Package APK for Release
+        if: github.event_name == 'push'
+        run: |
+          mkdir -p release-output
+          cp app/build/outputs/apk/release/*.apk release-output/DropVault-${NEW_TAG}.apk
+          echo "APK ready at release-output/DropVault-${NEW_TAG}.apk"
+
+      - name: Tag Repository
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${NEW_TAG}" -m "Release ${NEW_TAG} (Build ${BUILD_CODE}): ${LAST_COMMIT}" || true
+          git push origin "${NEW_TAG}" || true
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.NEW_TAG }}
+          name: DropVault ${{ env.NEW_TAG }} (Build ${{ env.BUILD_CODE }})
+          generate_release_notes: true
+          body: |
+            ## 📥 DropVault Release ${{ env.NEW_TAG }} (Build ${{ env.BUILD_CODE }})
+
+            ### 🚀 What's New in Version ${{ env.NEW_VERSION }}
+            - **Latest Update**: ${{ env.LAST_COMMIT }}
+            - **Signed Android APK**: Direct download `DropVault-${{ env.NEW_TAG }}.apk`
+
+            ### ✨ Key Features
+            - Local-First Cross-Device Inbox: Save text, selected snippets, web links, audio, video, images, PDFs, and files directly to local database storage.
+            - System-Wide Share Integration: Instant capture via Android System Share targets and floating **Process Text** action from any app.
+            - Built-in Local Wi-Fi Web Server: Host a PIN-protected local web server to access, search, and download inbox items from any PC, Mac, tablet, or phone on your Wi-Fi network.
+            - Duplicate Prevention & Storage Analytics: SHA-256 file hash deduplication and system storage usage gauge.
+            - Built-in Media Viewers & Players: Fullscreen image viewer, ExoPlayer audio player with variable speed controls, ExoPlayer video player, and external document launcher.
+            - Built with Jetpack Compose, Material 3, Ktor, Room Database, and Kotlin Coroutines.
+
+            ### 📱 Installation Instructions
+            1. Download `DropVault-${{ env.NEW_TAG }}.apk` on your Android device.
+            2. Tap the downloaded APK and enable **Install from Unknown Sources** if prompted.
+            3. Open **DropVault** and start creating and sharing!
+          files: |
+            release-output/DropVault-${{ env.NEW_TAG }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
