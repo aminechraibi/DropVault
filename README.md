@@ -49,6 +49,7 @@
 - **Media Playback**: AndroidX Media3 ExoPlayer.
 - **Image Loading**: Coil Compose.
 - **Dependency Management**: Gradle Kotlin DSL with Version Catalog.
+- **Firebase Services Ready**: Configured local `google-services.json` schema for Google Services build pipeline.
 
 ---
 
